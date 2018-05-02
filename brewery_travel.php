@@ -35,67 +35,18 @@ class TSP {
 		}
 	}
 	
-	public function update_beer_count($geocode_id){
-		
-		$con = new mysqli("localhost","root","","brewery");
-		
-		if ($con->connect_error){
-			die("Connection error: ". $con->connect_error);
-		}
-		
-		$query = "SELECT COUNT(*) rezultatas from geocodes g, brewery b, beers br where g.brewery_id=b.id and br.brewery_id=b.id and g.id=".$geocode_id ." group by g.id, g.brewery_id, g.latitude, g.longitude";
-		
-		$rez = $con->query($query);
-		
-		if($rez->num_rows > 0){
-			while($row = $rez->fetch_assoc()){
-				//echo "Rasta viso vietoje ".$geocode_id ." buvo ".$row["rezultatas"];
-				if ($con->query("UPDATE geocodes set beers=".$row["rezultatas"]." where id=".$geocode_id) === TRUE) {
-					echo "Updated! <br/>";
-				} else {
-					echo "Failed to update record ".$geocode_id;
-				}
-				
-			}	
-		} else {
-			echo "No beer types found in this location";
-		}
-	}
-	
-	public function beers(){
-		
-		$conn = new mysqli("localhost","root","","brewery");
-		
-		if ($conn->connect_error){
-			die("Connection failed: " . $conn->connect_error);
-		}
-		
-		$sql = "SELECT * FROM geocodes";
-		$result = $conn->query($sql);
-		
-		if ($result->num_rows > 0){
-			while($row = $result->fetch_assoc()){
-				$this->update_beer_count($row["id"]);
-			}
-		} else {
-			echo "0 results";
-		}
-		
-		$conn->close();
-	}
-	
 	public function locations(){
 		
 		$i=0;
-		$total=0;
-		$prems =array();
-		$dist = -1;
-		$current = array();
-		$home = array();
-		$cnt = 0;
-		$dd = 0;
-		$can_travel = true;
-		$minLocation = array();
+		$total=0;	//Total distance travelled
+		$prems =array(); // Array of all visited locations
+		$dist = -1;		 // Min distance to travel from current location to next
+		$current = array(); // Current location
+		$home = array(); // Home location
+		$cnt = 0; // Array counter for visited locations
+		$dd = 0;  // Distances
+		$can_travel = true; // Check if still have fuel to travel
+		$minLocation = array(); //Found min distance to travel location.
 		
 		if (empty($_GET["long"]) || empty($_GET["lat"])){
 			echo "Please enter coordinates above to start looking for most beer types in 2000km range";
@@ -107,7 +58,7 @@ class TSP {
 			return;
 		}
 		
-		$name = "";
+		$name = ""; // Temporary variable for brewery name
 		
 		$conn = new mysqli("localhost","root","","brewery");
 		
@@ -147,12 +98,15 @@ class TSP {
 		
 			foreach	($breweries as $brew){
 				
+				// Check if location was visited already 
 				if(in_array($brew["id"],$prems)){
 					continue;
 				}
 				
+				// Calculate distance from current location to another
 				$dd = $this->distance($current["latitude"], $current["longitude"], $brew["latitude"],$brew["longitude"]);
 				
+				// Find next closest brewery factor to travel
 				if ($dist == -1 or ($dd<$dist && $dd!=0)){
 					$dist=$dd;
 					$minLocation[0]["id"] = $brew["id"];
@@ -161,7 +115,7 @@ class TSP {
 					
 				}
 			}
-			
+			// Need to check distance to travel back home from next brewery factor
 			$dd=$this->distance($minLocation[0]["latitude"],$minLocation[0]["longitude"], $home["latitude"],$home["longitude"]);
 			
 			if ($dist>0 && ($total+$dist+$dd)<=2000){
@@ -187,35 +141,38 @@ class TSP {
 					echo "Location ".$prems[$cnt]." was not found in a databse.";
 				}
 				
-				
+				//Print travelling route
 				echo "-> [".$current["id"]."] ".$name.": ".$current["latitude"].", ".$current["longitude"]." distance ".$dd."km <br/>";
-			}
-			else if (($total+$dist)>2000){
-				$can_travel=false;
 			}else{
 				$can_travel=false;
 			}
 		}
 		
-		//Pridedant atstuma kiek liko gryzti is esamos vietos iki namu.
+		//Distance to get back home
 		$dd=$this->distance($current["latitude"],$current["longitude"], $home["latitude"],$home["longitude"]);
 
 		$total=$total+$dd;
 		
 		echo "<- HOME: ".$home["latitude"].", ".$home["longitude"]." distance ".$dd."km <br/><br/>";
 		
+		if (count($prems)<1){
+			echo "You need to move to another location, because there are no brewery factors in 2000km radius";
+			return;
+		}
 		
-		echo "Total brewery factors found ".count($prems).", total distance travelled: ".$total;
 		
+		echo "Total brewery factors found ".count($prems).", total distance travelled: ".$total."km";
 		
+		echo "<br/><br/><b>Beer types gathered: </b><BR/>";
 		
-		$sql = "SELECT b.name,a.latitude, a.longitude from geocodes a, brewery b where a.brewery_id=b.id and a.id=".$prems[$cnt];
+		$sql = "SELECT distinct b.name from geocodes a, beers b where a.brewery_id=b.brewery_id and a.id in (".implode(',',$prems).")";
 		
 		$result = $conn->query($sql);
 		
+		//Printing different beer types found in visited brewery factors.
 		if ($result->num_rows > 0){
 			while($row = $result->fetch_assoc()){
-				$name = $row["name"];
+				echo $row["name"]."<br/>";
 			}
 		}else {
 			echo "Location ".$prems[$cnt]." was not found in a databse.";
