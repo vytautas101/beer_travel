@@ -19,6 +19,13 @@ Also included are a few rake tasks we used to use to export the MySQL dumps into
 `ActiveRecord`). If you find them useful, great! If not... they're free, so
 don't complain.
 
+### Route planner
+
+The `brewery_travel.py` script computes a greedy brewery visit route. Pass a
+starting latitude and longitude and optionally `--max` for the maximum distance
+to travel. Use `--map-file <file>` to generate an HTML map showing the visited
+breweries and travel path.
+
 ## License
 
 This information is licensed under the [Open Database License][open-db-license].
