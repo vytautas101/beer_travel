@@ -86,56 +86,66 @@ def generate_map(
 def plan_route(
     lat: float, lon: float, max_distance: float = 2000.0, map_file: Optional[str] = None
 ) -> None:
+
     breweries, beers = load_data()
     home = {"lat": lat, "lon": lon}
-    current_lat, current_lon = lat, lon
-    total = 0.0
-    visited: List[Dict] = []
 
-    unvisited = breweries.copy()
-    while True:
-        best = None
-        best_d = None
-        for brew in unvisited:
-            d = distance(current_lat, current_lon, brew["latitude"], brew["longitude"])
-            d_back = distance(
-                brew["latitude"], brew["longitude"], home["lat"], home["lon"]
-            )
-            if total + d + d_back > max_distance:
+    # filter breweries that are reachable at all
+    candidates = [
+        b
+        for b in breweries
+        if distance(lat, lon, b["latitude"], b["longitude"])
+        + distance(b["latitude"], b["longitude"], lat, lon)
+        <= max_distance
+    ]
+
+    best_route: List[Dict] = []
+    best_types: Set[str] = set()
+    best_distance: float = float("inf")
+
+    def search(cur_lat: float, cur_lon: float, remaining: List[Dict], visited: List[Dict], types: Set[str], dist: float) -> None:
+        nonlocal best_route, best_types, best_distance
+
+        back = distance(cur_lat, cur_lon, home["lat"], home["lon"])
+        if dist + back <= max_distance:
+            if len(types) > len(best_types) or (
+                len(types) == len(best_types) and dist + back < best_distance
+            ):
+                best_route = visited.copy()
+                best_types = types.copy()
+                best_distance = dist + back
+
+        for i, brew in enumerate(remaining):
+            d = distance(cur_lat, cur_lon, brew["latitude"], brew["longitude"])
+            new_dist = dist + d
+            if new_dist + distance(brew["latitude"], brew["longitude"], home["lat"], home["lon"]) > max_distance:
                 continue
-            if best_d is None or (d < best_d and d != 0.0):
-                best = brew
-                best_d = d
-        if best is None:
-            break
-        visited.append(best)
-        unvisited.remove(best)
-        current_lat, current_lon = best["latitude"], best["longitude"]
-        total += best_d
+            search(
+                brew["latitude"],
+                brew["longitude"],
+                remaining[:i] + remaining[i + 1 :],
+                visited + [brew],
+                types | beers.get(brew["brewery_id"], set()),
+                new_dist,
+            )
 
-    # distance back home
-    total += distance(current_lat, current_lon, home["lat"], home["lon"])
-
-    beer_types: Set[str] = set()
-    for brew in visited:
-        beer_types.update(beers.get(brew["brewery_id"], set()))
+    search(lat, lon, candidates, [], set(), 0.0)
 
     print("Visited breweries:")
-    for brew in visited:
+    for brew in best_route:
         print(f"  id {brew['brewery_id']} at {brew['latitude']},{brew['longitude']}")
-    print(f"Total distance traveled: {total:.2f} km")
-    print(f"Different beer types gathered: {len(beer_types)}")
-    for name in sorted(beer_types):
+    print(f"Total distance traveled: {best_distance:.2f} km")
+    print(f"Different beer types gathered: {len(best_types)}")
+    for name in sorted(best_types):
         print(name)
 
     if map_file:
-        generate_map(lat, lon, visited, map_file)
-
+        generate_map(lat, lon, best_route, map_file)
 
 if __name__ == "__main__":
     import argparse
 
-    p = argparse.ArgumentParser(description="Compute greedy brewery route")
+    p = argparse.ArgumentParser(description="Compute beer-diversity-focused brewery route")
     p.add_argument("lat", type=float, help="Starting latitude")
     p.add_argument("lon", type=float, help="Starting longitude")
     p.add_argument(
